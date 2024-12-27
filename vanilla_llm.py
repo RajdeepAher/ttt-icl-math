@@ -1,3 +1,6 @@
+from huggingface_hub import login
+from dotenv import load_dotenv
+import os
 import json
 import torch
 import numpy as np
@@ -8,9 +11,18 @@ from tqdm import tqdm
 import evaluate
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
+load_dotenv()
+api_key = os.getenv("HF_API_KEY")
+if api_key:
+    login(api_key)
+    print("Logged in successfully.")
+else:
+    print("API key not found. Please check your .env file.")
+
+
 def main():
     model_name = 'meta-llama/Llama-3.1-8B-Instruct'
-    num_samples = 10
+    # num_samples = 10
     results = []
     eval_dataset_name='HuggingFaceH4/MATH-500'
     quantization_config = BitsAndBytesConfig(
@@ -48,20 +60,20 @@ def main():
 
         generated_solution =tokenizer.decode(outputs[0][len(inputs['input_ids'][0]):], skip_special_tokens=True)
         if check ==0:
-        print('QUERY--------------')
-        print(query)
-        print('GENERATED SOLUTION--------------')
-        print(generated_solution)
-        print('GROUND TRUTH--------------')
-        print(item.get('solution', ''))
-        check +=1
+            print('QUERY--------------')
+            print(query)
+            print('GENERATED SOLUTION--------------')
+            print(generated_solution)
+            print('GROUND TRUTH--------------')
+            print(item.get('solution', ''))
+            check +=1
         results.append({
                         'query': query,
                         'prediction': generated_solution,
                         'ground_truth': item.get('solution', ''),
                     })
     with open('evaluation_results_vanilla.json', 'w') as f:
-    json.dump(results, f, indent=4)
+        json.dump(results, f, indent=4)
 
 
 if __name__=='__main__':

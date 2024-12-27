@@ -178,12 +178,6 @@ class SIFTModel:
             dict: Evaluation results containing predictions and metrics
         """
         self.results =[]
-        #  {
-        #     'queries': [],
-        #     'predictions': [],
-        #     'ground_truth': [],
-        #     #'retrieval_similarities': []
-        # }
 
         eval_data = self.eval_dataset
         if num_samples:
@@ -222,12 +216,12 @@ class SIFTModel:
 
         return self.results
 
-if __name__='__main__':
+if __name__=='__main__':
 
     import json
     sift_model = SIFTModel()
     results=[]
     print("Starting evaluation...")
-    results = sift_model.evaluate_model(num_samples=10)
+    results = sift_model.evaluate_model()
     with open('evaluation_results_sift.json', 'w') as f:
-    json.dump(results, f, indent=4)
+        json.dump(results, f, indent=4)
