@@ -37,41 +37,53 @@ def main():
                     device_map="auto",
                 )
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    eval_data = load_dataset(eval_dataset_name)['test']
-    if num_samples:
-        eval_data = eval_data.select(range(min(num_samples, len(eval_data))))
+    # eval_data = load_dataset(eval_dataset_name)['test']
+    # if num_samples:
+    #     eval_data = eval_data.select(range(min(num_samples, len(eval_data))))
 
-    print(f"Evaluating on {len(eval_data)} samples from MATH-500...")
-    check =0
-    for item in tqdm(eval_data):
-        query = item.get('problem', None)
+    # print(f"Evaluating on {len(eval_data)} samples from MATH-500...")
+    # check =0
+    # for item in tqdm(eval_data):
+    #     query = item.get('problem', None)
+    num_evaluated = 0
+    check=0
+    with open(self.eval_dataset, 'r') as file:
+        for line in tqdm(file):
+            if num_evaluated == num_samples:
+                break
+            num_evaluated += 1
 
-        prompt ="Output <|eot_id|> at the end of final solution. Use \boxed{} only once in each solution, only for the final answer of the asked question."
-        prompt += f"Now solve this problem:\n{query}\nSolution:"
+            item = json.loads(line.strip())  # Parse each line as a JSON object
+            query = item.get("problem", "")
 
-        inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=4096).to(model.device)
-        outputs = model.generate(
-            **inputs,
-            max_length=4096,
-            eos_token_id=tokenizer.eos_token_id,
-            num_return_sequences=1
-        )
+            prompt ="Output <|eot_id|> at the end of final solution. Use \\boxed{} only once in each solution, only for the final answer of the asked question."
+            prompt += f"Now solve this problem:\n{query}\nSolution:"
+
+            inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=4096).to(model.device)
+            outputs = model.generate(
+                **inputs,
+                max_length=4096,
+                eos_token_id=tokenizer.eos_token_id,
+                num_return_sequences=1,
+                temperature =1e-5,
+                do_sample=False,
+            )
 
 
-        generated_solution =tokenizer.decode(outputs[0][len(inputs['input_ids'][0]):], skip_special_tokens=True)
-        if check ==0:
-            print('QUERY--------------')
-            print(query)
-            print('GENERATED SOLUTION--------------')
-            print(generated_solution)
-            print('GROUND TRUTH--------------')
-            print(item.get('solution', ''))
-            check +=1
-        results.append({
-                        'query': query,
-                        'prediction': generated_solution,
-                        'ground_truth': item.get('solution', ''),
-                    })
+            generated_solution =tokenizer.decode(outputs[0][len(inputs['input_ids'][0]):], skip_special_tokens=True)
+            if check ==0:
+                print('QUERY--------------')
+                print(query)
+                print('GENERATED SOLUTION--------------')
+                print(generated_solution)
+                print('GROUND TRUTH--------------')
+                print(item.get('solution', ''))
+                check +=1
+            results.append({
+                            'query': query,
+                            'prediction': generated_solution,
+                            'ground_truth': item.get('solution', ''),
+                        })
     with open('evaluation_results_vanilla.json', 'w') as f:
         json.dump(results, f, indent=4)
 

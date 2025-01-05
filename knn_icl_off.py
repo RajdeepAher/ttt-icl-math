@@ -22,8 +22,8 @@ else:
 class KNNLanguageModel:
     def __init__(self,
                  model_name='meta-llama/Llama-3.1-8B-Instruct',
-                 retrieval_dataset_name='dyyyyyyyy/ScaleQuest-Math',
-                 eval_dataset_name='HuggingFaceH4/MATH-500',
+                 eval_dataset_path='math_splits/test.jsonl',
+                 retrieval_dataset_path='math_splits/train.jsonl',
                  embedding_model='Snowflake/snowflake-arctic-embed-l',
                  k=3):
         """
@@ -34,7 +34,8 @@ class KNNLanguageModel:
             embedding_model (str): Sentence transformer model for embeddings
             k (int): Number of nearest neighbors to retrieve
         """
-
+        self.eval_dataset = eval_dataset_path
+        self.retrieval_dataset = retrieval_dataset_path
         # Setup quantization configuration for 4-bit model
         self.quantization_config = BitsAndBytesConfig(
             load_in_4bit=True,
@@ -50,10 +51,6 @@ class KNNLanguageModel:
             device_map='auto'
         )
 
-        # Load both evaluation and retrieval datasets
-        self.eval_dataset = load_dataset(eval_dataset_name)['test']
-        self.retrieval_dataset = load_dataset(retrieval_dataset_name)['train']
-
         self.embedding_model = SentenceTransformer(embedding_model)
         self.k = k
 
@@ -65,28 +62,32 @@ class KNNLanguageModel:
         self.contexts = []
         self.solutions = []
         
-        for sample in tqdm(self.retrieval_dataset):
-            try:
-                problem = sample.get('query', '')
-                solution = sample.get('response', '')
-                
-                if not problem or not solution:  # Skip if either is empty
-                    continue
+        index_size = 0
+        with open(self.retrieval_dataset, 'r') as file:
+            for line in tqdm(file):
+            #CHANGE THIS TO CHANGE NO. OF EMBEDDINGS IN FAISS INDEX
+                if index_size == 1000:
+                    break
+                index_size +=1
+                try:
+                    sample = json.loads(line.strip())  # Parse each line as a JSON object
+                    problem = sample.get("problem", "")
+                    solution = sample.get("solution", "")
                     
-                # Store the problem and solution for later retrieval
-                self.contexts.append(problem)
-                self.solutions.append(solution)
-                
-                # Combine problem and solution for embedding
-                combined_text = f"Problem: {problem}\nSolution: {solution}"
-                
-                # Generate embeddings for the combined text
-                embedded = self.embedding_model.encode(combined_text, convert_to_tensor=True)
-                embeddings.append(embedded.cpu().numpy())
-                
-            except Exception as e:
-                print(f"Error embedding sample: {e}")
-                continue
+                    # Store the problem and solution for later retrieval
+                    self.contexts.append(problem)
+                    self.solutions.append(solution)
+                    
+                    # Combine problem and solution for embedding
+                    combined_text = f"Problem: {problem}\nSolution: {solution}"
+                    
+                    # Generate embeddings for the combined text
+                    embedded = self.embedding_model.encode(combined_text, convert_to_tensor=True)
+                    embeddings.append(embedded.cpu().numpy())
+                    
+                except Exception as e:
+                    print(f"Error embedding sample: {e}")
+                    continue
 
         # Convert to numpy array
         embeddings = np.array(embeddings).astype('float32')
@@ -132,7 +133,7 @@ class KNNLanguageModel:
         """
         retrieved_contexts, retrieved_solutions, similarities = self.retrieve_nearest_neighbors(query)
 
-        prompt ="Output <|eot_id|> at the end of final solution. Use \boxed{} only once in each solution, only for the final answer of the asked question."
+        prompt ="Output <|eot_id|> at the end of final solution. Use \\boxed{} only once in each solution, only for the final answer of the asked question."
         prompt += "Here are some similar math problems and their solutions:\n\n"
         for ctx, sol in zip(retrieved_contexts, retrieved_solutions):
             prompt += f"Problem: {ctx}\nSolution: {sol}\n\n"
@@ -143,11 +144,13 @@ class KNNLanguageModel:
             **inputs,
             max_length=max_length,
             eos_token_id=self.tokenizer.eos_token_id,
-            num_return_sequences=1
+            num_return_sequences=1,
+            temperature =1e-5,
+            do_sample=False,
         )
 
         generated_solution = self.tokenizer.decode(outputs[0][len(inputs['input_ids'][0]):], skip_special_tokens=True)
-        return generated_solution, similarities
+        return generated_solution, similarities, retrieved_contexts, retrieved_solutions
 
     def evaluate_model(self, num_samples=None):
         """
@@ -162,39 +165,38 @@ class KNNLanguageModel:
 
         results=[]
 
-        eval_data = self.eval_dataset
-        if num_samples:
-            eval_data = eval_data.select(range(min(num_samples, len(self.eval_dataset))))
+        num_evaluated = 0
+        check=0
+        with open(self.eval_dataset, 'r') as file:
+            for line in tqdm(file):
+                if num_evaluated == num_samples:
+                    break
+                num_evaluated += 1
+                try:
+                    item = json.loads(line.strip())  # Parse each line as a JSON object
+                    query = item.get("problem", "")
+                    generated_solution, similarities,retrieved_contexts, retrieved_solutions = self.generate_with_retrieval(query)
+                    if check ==0:
+                        print('QUERY--------------')
+                        print(query)
+                        print('GENERATED SOLUTION--------------')
+                        print(generated_solution)
+                        print('GROUND TRUTH--------------')
+                        print(item.get('solution', ''))
+                        check +=1
 
-        print(f"Evaluating on {len(eval_data)} samples from MATH-500...")
-        check =0
-        for item in tqdm(eval_data):
-            query = item.get('problem', None)
-            if not query:
-                continue
+                    results.append({
+                        'queries': query,
+                        'predictions': generated_solution,
+                        'ground_truth': item.get('solution', ''),
+                        'retrieval_similarities': similarities.tolist(),
+                        'retrieved_problems': retrieved_problems,
+                        'retrieved_solutions':retrieved_solutions,
+                    })
 
-            try:
-                # retrieved_contexts, retrieved_solutions, similarities = self.retrieve_nearest_neighbors(query)
-                generated_solution, similarities = self.generate_with_retrieval(query)
-                if check ==0:
-                    print('QUERY--------------')
-                    print(query)
-                    print('GENERATED SOLUTION--------------')
-                    print(generated_solution)
-                    print('GROUND TRUTH--------------')
-                    print(item.get('solution', ''))
-                    check +=1
-
-                results.append({
-                    'queries': query,
-                    'predictions': generated_solution,
-                    'ground_truth': item.get('solution', ''),
-                    'retrieval_similarities': similarities.tolist()
-                })
-
-            except Exception as e:
-                print(f"Error processing query: {e}")
-                continue
+                except Exception as e:
+                    print(f"Error processing query: {e}")
+                    continue
 
         return results
 

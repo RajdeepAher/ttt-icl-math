@@ -24,15 +24,15 @@ class SIFTModel:
     def __init__(
         self,
     model_name = 'meta-llama/Llama-3.1-8B-Instruct',
-    retrieval_dataset_name='dyyyyyyyy/ScaleQuest-Math',
-    eval_dataset_name='HuggingFaceH4/MATH-500',
+    eval_dataset_path='math_splits/test.jsonl',
+    retrieval_dataset_path='math_splits/train.jsonl',
     embedding_model_name='Snowflake/snowflake-arctic-embed-l',
     k=3
 
     ):
         self.model_name = model_name
-        self.eval_dataset_name = eval_dataset_name
-        self.retrieval_dataset_name = retrieval_dataset_name
+        self.eval_dataset = eval_dataset_path
+        self.retrieval_dataset = retrieval_dataset_path
         self.embedding_model_name = embedding_model_name
         self.k = k
 
@@ -51,12 +51,6 @@ class SIFTModel:
                 device_map="auto",
             )
 
-        if not hasattr(self, 'eval_dataset'):
-            self.eval_dataset = load_dataset(self.eval_dataset_name)['test']
-
-        if not hasattr(self, 'retrieval_dataset'):
-            self.retrieval_dataset = load_dataset(self.retrieval_dataset_name)['train']
-
         if not hasattr(self, 'embedding_model'):
             self.embedding_model = SentenceTransformer(self.embedding_model_name)
 
@@ -72,24 +66,28 @@ class SIFTModel:
         self.contexts = []
         self.solutions = []
 
-        for sample in tqdm(self.retrieval_dataset):
-            try:
-                problem = sample.get("query", "")
-                solution = sample.get("response", "")
-                if not problem or not solution:
-                    print('Either problem or solution was missing')
+        index_size = 0
+        with open(self.retrieval_dataset, 'r') as file:
+            for line in tqdm(file):
+            #CHANGE THIS TO CHANGE NO. OF EMBEDDINGS IN FAISS INDEX
+                if index_size == 1000:
+                    break
+                index_size +=1
+                try:
+                    sample = json.loads(line.strip())  # Parse each line as a JSON object
+                    problem = sample.get("problem", "")
+                    solution = sample.get("solution", "")
+
+                    self.contexts.append(problem)
+                    self.solutions.append(solution)
+
+                    combined_text = f"Problem: {problem} \n Solution: {solution}"
+                    embedded = self.embedding_model.encode(combined_text, convert_to_tensor=True)
+                    embeddings.append(embedded.cpu().numpy())
+
+                except Exception as e:
+                    print(f"Error processing sample: {e}")
                     continue
-
-                self.contexts.append(problem)
-                self.solutions.append(solution)
-
-                combined_text = f"Problem: {problem} \n Solution: {solution}"
-                embedded = self.embedding_model.encode(combined_text, convert_to_tensor=True)
-                embeddings.append(embedded.cpu().numpy())
-
-            except Exception as e:
-                print(f"Error processing sample: {e}")
-                continue
 
         # Stack embeddings into a single NumPy array
         embeddings = np.vstack(embeddings).astype('float32')
@@ -150,7 +148,7 @@ class SIFTModel:
         Generate response with retrieved in-context examples
         """
         retrieved_contexts, retrieved_solutions = self.retrieve_nearest_neighbors(query)
-        prompt ="Output <|eot_id|> at the end of final solution. Use \boxed{} only once in each solution, only for the final answer of the asked question."
+        prompt ="Output <|eot_id|> at the end of final solution. Use \\boxed{} only once in each solution, only for the final answer of the asked question."
         prompt += "Here are some similar math problems and their solutions:\n\n"
         for ctx, sol in zip(retrieved_contexts, retrieved_solutions):
             prompt += f"Problem: {ctx}\nSolution: {sol}\n\n"
@@ -161,11 +159,13 @@ class SIFTModel:
             **inputs,
             max_length=max_length,
             eos_token_id=self.tokenizer.eos_token_id,
-            num_return_sequences=1
+            num_return_sequences=1,
+            temperature =1e-5,
+            do_sample=False,
         )
 
         generated_solution = self.tokenizer.decode(outputs[0][len(inputs['input_ids'][0]):], skip_special_tokens=True)
-        return generated_solution
+        return generated_solution, retrieved_contexts, retrieved_solutions
 
     def evaluate_model(self, num_samples=None):
         """
@@ -179,40 +179,38 @@ class SIFTModel:
         """
         self.results =[]
 
-        eval_data = self.eval_dataset
-        if num_samples:
-            eval_data = eval_data.select(range(min(num_samples, len(self.eval_dataset))))
+        num_evaluated = 0
+        check=0
+        with open(self.eval_dataset, 'r') as file:
+            for line in tqdm(file):
+                if num_evaluated == num_samples:
+                    break
+                num_evaluated += 1
+                try:
+                    item = json.loads(line.strip())  # Parse each line as a JSON object
+                    query = item.get("problem", "")
+                    generated_solution, retrieved_problems,retrieved_solutions = self.generate_with_retrieval(query)
+                    if check ==0:
+                        print('QUERY--------------')
+                        print(query)
+                        print('GENERATED SOLUTION--------------')
+                        print(generated_solution)
+                        print('GROUND TRUTH--------------')
+                        print(item.get('solution', ''))
+                        check +=1
 
-        check = 0
-        print(f"Evaluating on {len(eval_data)} samples from MATH-500...")
-        for item in tqdm(eval_data):
-            query = item.get('problem', None)
-            # print(query)
-            if not query:
-                continue
-
-            try:
-
-                generated_solution = self.generate_with_retrieval(query)
-                if check ==0:
-                    print('QUERY--------------')
-                    print(query)
-                    print('GENERATED SOLUTION--------------')
-                    print(generated_solution)
-                    print('GROUND TRUTH--------------')
-                    print(item.get('solution', ''))
-                    check +=1
-
-                self.results.append({
-                    'query': query,
-                    'prediction': generated_solution,
-                    'ground_truth': item.get('solution', ''),
-                })
+                    self.results.append({
+                        'query': query,
+                        'prediction': generated_solution,
+                        'ground_truth': item.get('solution', ''),
+                        'retrieved_problems': retrieved_problems,
+                        'retrieved_solutions':retrieved_solutions,
+                    })
 
 
-            except Exception as e:
-                print(f"Error processing query: {e}")
-                continue
+                except Exception as e:
+                    print(f"Error processing query: {e}")
+                    continue
 
         return self.results
 
