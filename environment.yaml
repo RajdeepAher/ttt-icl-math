@@ -1,0 +1,22 @@
+name: qa_env
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10.13
+  - pip=23.3.1
+  - pytorch=2.1.2
+  - pytorch-cuda=12.1
+  - numpy=1.26.3
+  - tqdm=4.66.1
+  - pip:
+    - transformers==4.36.2
+    - accelerate==0.25.0
+    - huggingface-hub==0.20.3
+    - sentencepiece==0.1.99
+    - protobuf==4.25.1
+    - bitsandbytes==0.41.3
+    - safetensors==0.4.1
+    - scipy==1.11.4
