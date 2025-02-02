@@ -12,11 +12,11 @@ dependencies:
   - numpy=1.26.3
   - tqdm=4.66.1
   - pip:
-    - transformers==4.36.2
-    - accelerate==0.25.0
-    - huggingface-hub==0.20.3
+    - transformers==4.47.0
+    - accelerate==0.26.0
+    - huggingface-hub==0.25.0
     - sentencepiece==0.1.99
     - protobuf==4.25.1
-    - bitsandbytes==0.41.3
+    - bitsandbytes==0.45.1
     - safetensors==0.4.1
     - scipy==1.11.4
