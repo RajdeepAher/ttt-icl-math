@@ -70,7 +70,13 @@ def query_bot(
         max_new_tokens=512,
         **kwargs,
 ):
-    prefix = "Below is a question followed by some context from different sources. Please answer the question based on the context. The answer to the question is a word or entity. If the provided information is insufficient to answer the question, respond 'Insufficient Information'. Answer directly without explanation."
+    prefix = """You are a precise question-answering assistant. Your task is to answer questions based solely on the provided context. Follow these guidelines:
+
+1. Give direct, concise answers without explanations
+2. If the context clearly supports a yes/no answer, respond with just 'Yes' or 'No'
+3. For factual questions, provide the specific entity, name, or value
+4. If the context doesn't contain enough information to answer confidently, respond with 'Insufficient Information'
+5. Base your answer only on the given context, not on external knowledge"""
     
     messages = [
         {"role": "system", "content": prefix},
@@ -118,7 +124,7 @@ def process_single_file(input_file: Path, model, tokenizer):
     
     for d in tqdm(doc_data, desc=f"Processing {input_file.name}"):
         retrieval_list = d['retrieval_list']
-        context = '--------------'.join(e['text'] for e in retrieval_list)
+        context = '\n---------'.join(e['text'] for e in retrieval_list)
         prompt = f"Question:{d['query']}\n\nContext:\n\n{context}"
         response = query_bot(prompt, model, tokenizer)
         
