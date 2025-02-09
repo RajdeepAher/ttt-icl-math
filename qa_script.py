@@ -2,7 +2,7 @@ import json
 import torch
 import argparse
 from tqdm import tqdm
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from huggingface_hub import login
 import os
 from typing import Any, Generator, List, Optional
@@ -28,8 +28,8 @@ def transform_json(input_json):
         new_text = (
             f"[Excerpt from document]\n"
             f"title: {item['metadata']['title']}\n"
-            f"published_at: {item['metadata']['published_at']}\n"
-            f"source: {item['metadata']['source']}\n"
+            # f"published_at: {item['metadata']['published_at']}\n"
+            # f"source: {item['metadata']['source']}\n"
             f"Excerpt:\n"
             f"-----\n"
             f"{item['text']}\n"
@@ -155,11 +155,22 @@ def main():
     login(token=args.hf_token)
 
     print("Loading model and tokenizer...")
-    # Load model and tokenizer
+    # Configure 4-bit quantization
+    quantization_config = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_compute_dtype=torch.float16,
+        bnb_4bit_use_double_quant=True,
+        bnb_4bit_quant_type="nf4"
+    )
+    
+    # Load model with 4-bit quantization
     model = AutoModelForCausalLM.from_pretrained(
         args.model_name,
-        device_map="auto"
+        device_map="auto",
+        quantization_config=quantization_config,
+        trust_remote_code=True
     )
+    
     tokenizer = AutoTokenizer.from_pretrained(
         args.model_name,
         device_map="auto"
