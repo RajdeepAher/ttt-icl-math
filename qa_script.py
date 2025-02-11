@@ -66,7 +66,7 @@ def query_bot(
         messages,
         model,
         tokenizer,
-        temperature=0.01,
+        temperature=0.1,
         max_new_tokens=512,
         **kwargs,
 ):
