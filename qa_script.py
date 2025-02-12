@@ -170,14 +170,11 @@ def main():
     model = AutoModelForCausalLM.from_pretrained(
         args.model_name,
         device_map="auto",
+        torch_dtype = "auto",
         quantization_config=quantization_config,
-        trust_remote_code=True
     )
     
-    tokenizer = AutoTokenizer.from_pretrained(
-        args.model_name,
-        device_map="auto"
-    )
+    tokenizer = AutoTokenizer.from_pretrained(args.model_name)
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = 'right'
     print("Model and tokenizer loaded successfully!")
