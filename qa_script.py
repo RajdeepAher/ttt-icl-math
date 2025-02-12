@@ -144,6 +144,7 @@ def main():
     parser = argparse.ArgumentParser(description='Process JSON files using Hugging Face model')
     parser.add_argument('--hf_token', type=str, required=True, help='Hugging Face login token')
     parser.add_argument('--model_name', type=str, default="meta-llama/Llama-2-70b-chat-hf", help='Hugging Face model name')
+    parser.add_argument("--use_4bit", action="store_true", help="Enable 4-bit quantization (default: False)")
     
     # Parse arguments
     args = parser.parse_args()
@@ -156,12 +157,14 @@ def main():
 
     print("Loading model and tokenizer...")
     # Configure 4-bit quantization
-    quantization_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_compute_dtype=torch.float16,
-        bnb_4bit_use_double_quant=True,
-        bnb_4bit_quant_type="nf4"
-    )
+    quantization_config = None
+    if args.use_4bit:
+        quantization_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=torch.float16,
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_quant_type="nf4"
+        )
     
     # Load model with 4-bit quantization
     model = AutoModelForCausalLM.from_pretrained(
