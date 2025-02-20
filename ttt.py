@@ -99,6 +99,7 @@ def setup_model_and_tokenizer(model_name, load_in_4bit=True):
     else:
         quantization_config = None
         torch_dtype = None
+    
 
     device_map = "auto" if torch.cuda.is_available() else "cpu"
     
@@ -110,7 +111,8 @@ def setup_model_and_tokenizer(model_name, load_in_4bit=True):
         trust_remote_code=True
     )
     model.config.use_cache = False
-
+    tokenizer.pad_token = tokenizer.eos_token
+    model.config.pad_token_id = tokenizer.eos_token_id
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     tokenizer.padding_side = 'right'
     tokenizer.pad_token = tokenizer.eos_token
@@ -173,10 +175,15 @@ def query_model(prompt, model, tokenizer, temperature=0.1, max_new_tokens=512):
     model_inputs = {k: v.to(model.device) for k, v in model_inputs.items()}
 
     with torch.no_grad():
+        outputs = model(**model_inputs)
+
+        if torch.isnan(outputs.logits).any() or torch.isinf(outputs.logits).any():
+            raise RuntimeError("Model generated NaN or Inf values!")
         generated_ids = model.generate(
             **model_inputs,
             max_new_tokens=max_new_tokens,
-            temperature=temperature
+            temperature=temperature,
+            pad_token_id=tokenizer.pad_token_id
         )
 
     generated_ids = [
