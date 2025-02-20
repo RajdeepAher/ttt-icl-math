@@ -111,11 +111,11 @@ def setup_model_and_tokenizer(model_name, load_in_4bit=True):
         trust_remote_code=True
     )
     model.config.use_cache = False
-    tokenizer.pad_token = tokenizer.eos_token
-    model.config.pad_token_id = tokenizer.eos_token_id
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     tokenizer.padding_side = 'right'
     tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.pad_token = tokenizer.eos_token
+    model.config.pad_token_id = tokenizer.eos_token_id
     
     return model, tokenizer
 
