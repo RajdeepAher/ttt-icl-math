@@ -219,12 +219,12 @@ def main():
     parser = argparse.ArgumentParser(description='Fine-tune and inference with Llama model')
     parser.add_argument('--hf_token', type=str, required=True, help='Hugging Face login token')
     parser.add_argument('--model_name', type=str, default="meta-llama/Llama-2-7b-hf", help='Model name')
-    parser.add_argument('--input_files', nargs='+', help='Specific input files to process')
+    #parser.add_argument('--input_files', nargs='+', help='Specific input files to process')
     
     args = parser.parse_args()
 
     # Clone repository
-    os.system("git clone https://github.com/vlgiitr/ttt-icl-math.git")
+    #os.system("git clone https://github.com/vlgiitr/ttt-icl-math.git")
     
     # Set up CUDA
     torch.set_default_dtype(torch.float16)
@@ -237,17 +237,25 @@ def main():
     print("Model and tokenizer loaded successfully!")
 
     # Process specified input files
+    # input_dir = Path('input_data')
+    # if args.input_files:
+    #     json_files = [input_dir / filename for filename in args.input_files]
+    # else:
+    #     json_files = list(input_dir.glob('*.json'))
+    
+    # if not json_files:
+    #     print("No JSON files found to process")
+    #     return
+
+    # print(f"Processing {len(json_files)} files")
     input_dir = Path('input_data')
-    if args.input_files:
-        json_files = [input_dir / filename for filename in args.input_files]
-    else:
-        json_files = list(input_dir.glob('*.json'))
+    json_files = list(input_dir.glob('*.json'))
     
     if not json_files:
-        print("No JSON files found to process")
+        print("No JSON files found in input_data directory")
         return
 
-    print(f"Processing {len(json_files)} files")
+    print(f"Found {len(json_files)} JSON files to process")
     
     for input_file in json_files:
         print(f"\nProcessing file: {input_file.name}")
