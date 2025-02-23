@@ -8,3 +8,4 @@ tqdm
 bitsandbytes 
 activeft
 python-dotenv
+trl==0.12.0
