@@ -7,6 +7,7 @@ from huggingface_hub import login
 import os
 from typing import Any, Generator, List, Optional
 from pathlib import Path
+import pandas as pd
 
 # Create necessary directories
 os.makedirs('input_data', exist_ok=True)
@@ -20,47 +21,106 @@ def save_list_to_json(lst, filename):
     with open(filename, 'w') as file:
         json.dump(lst, file, indent=4)
 
-def transform_json(input_json):
-    if isinstance(input_json, list):
-        return [transform_json(item) for item in input_json]
-    new_retrieval_list = []
-    for item in input_json["retrieval_list"]:
-        new_text = (
-            f"[Excerpt from document]\n"
-            f"title: {item['metadata']['title']}\n"
-            # f"published_at: {item['metadata']['published_at']}\n"
-            # f"source: {item['metadata']['source']}\n"
-            f"Excerpt:\n"
-            f"-----\n"
-            f"{item['text']}\n"
-            f"-----"
-        )
-        new_retrieval_list.append({
-            "text": new_text,
-            "score": item["score"]
+# def transform_json(input_json):
+#     if isinstance(input_json, list):
+#         return [transform_json(item) for item in input_json]
+#     new_retrieval_list = []
+#     for item in input_json["retrieval_list"]:
+#         new_text = (
+#             f"[Excerpt from document]\n"
+#             f"title: {item['metadata']['title']}\n"
+#             # f"published_at: {item['metadata']['published_at']}\n"
+#             # f"source: {item['metadata']['source']}\n"
+#             f"Excerpt:\n"
+#             f"-----\n"
+#             f"{item['text']}\n"
+#             f"-----"
+#         )
+#         new_retrieval_list.append({
+#             "text": new_text,
+#             "score": item["score"]
+#         })
+
+#     new_gold_list = []
+#     for item in input_json["gold_list"]:
+#         new_gold_list.append({
+#             "title": item["title"],
+#             "author": item["author"],
+#             "url": item["url"],
+#             "source": item["source"],
+#             "category": item["category"],
+#             "published_at": item["published_at"],
+#             "fact": item["fact"]
+#         })
+
+#     new_json = {
+#         "query": input_json["query"],
+#         "answer": input_json["answer"],
+#         "question_type": input_json["question_type"],
+#         "retrieval_list": new_retrieval_list,
+#         "gold_list": new_gold_list
+#     }
+
+#     return new_json
+sample_indices_path = "sampled_indices.pkl"
+
+if os.path.exists(sample_indices_path):
+    sampled_indices = pd.read_pickle(sample_indices_path)
+    print("Loaded precomputed indices.")
+else:
+    sampled_indices = None  # Allows function to run without sampling if needed
+
+def transform_json(input_json, use_sampling=True):
+    # Convert JSON input to DataFrame
+    file_df = pd.DataFrame(input_json)
+
+    # Exclude 'null_query' rows
+    file_df = file_df[file_df["question_type"] != "null_query"].reset_index(drop=True)
+
+    # Apply sampling only if use_sampling=True and sampled indices exist
+    if use_sampling and sampled_indices is not None:
+        file_df = file_df.loc[sampled_indices].reset_index(drop=True)
+
+    transformed_data = []
+    
+    for row in file_df.to_dict(orient="records"):
+        new_retrieval_list = [
+            {
+                "text": (
+                    f"[Excerpt from document]\n"
+                    f"title: {item['metadata']['title']}\n"
+                    f"Excerpt:\n"
+                    f"-----\n"
+                    f"{item['text']}\n"
+                    f"-----"
+                ),
+                "score": item["score"]
+            }
+            for item in row["retrieval_list"]
+        ]
+
+        new_gold_list = [
+            {
+                "title": item["title"],
+                "author": item["author"],
+                "url": item["url"],
+                "source": item["source"],
+                "category": item["category"],
+                "published_at": item["published_at"],
+                "fact": item["fact"]
+            }
+            for item in row["gold_list"]
+        ]
+
+        transformed_data.append({
+            "query": row["query"],
+            "answer": row["answer"],
+            "question_type": row["question_type"],
+            "retrieval_list": new_retrieval_list,
+            "gold_list": new_gold_list
         })
 
-    new_gold_list = []
-    for item in input_json["gold_list"]:
-        new_gold_list.append({
-            "title": item["title"],
-            "author": item["author"],
-            "url": item["url"],
-            "source": item["source"],
-            "category": item["category"],
-            "published_at": item["published_at"],
-            "fact": item["fact"]
-        })
-
-    new_json = {
-        "query": input_json["query"],
-        "answer": input_json["answer"],
-        "question_type": input_json["question_type"],
-        "retrieval_list": new_retrieval_list,
-        "gold_list": new_gold_list
-    }
-
-    return new_json
+    return transformed_data
 
 def query_bot(
         messages,
