@@ -255,7 +255,7 @@ def main():
         
         if save_list:
             # Create output filename based on input filename
-            output_filename = f'qa_output/llama_{input_file.stem}_output.json'
+            output_filename = f'qa_output_mm/qwen7b_{input_file.stem}_output.json'
             save_list_to_json(save_list, output_filename)
             print(f"Results saved to {output_filename}")
 
