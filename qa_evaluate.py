@@ -1,6 +1,7 @@
 import json
 from tqdm import tqdm
 import re
+import pandas as pd
 import os
 from collections import Counter
 
@@ -157,6 +158,29 @@ def evaluate_model(doc_data, model_name):
             'evaluated': len(overall_pred_list)
         }
     }
+def filter_json_by_indices(input_json, use_sampling=True):
+    sample_indices_path = "sampled_indices.pkl"
+    
+    # Load sampled indices if available
+    if os.path.exists(sample_indices_path):
+        sampled_indices = pd.read_pickle(sample_indices_path)
+        print("Loaded precomputed indices.")
+    else:
+        sampled_indices = None  # Allows function to run without sampling if needed
+    
+    # Convert JSON input to DataFrame
+    file_df = pd.DataFrame(input_json)
+    
+    # Exclude 'null_query' rows
+    file_df = file_df[file_df["question_type"] != "null_query"].reset_index(drop=True)
+    
+    # Apply sampling only if use_sampling=True and sampled indices exist
+    if use_sampling and sampled_indices is not None:
+        file_df = file_df.loc[sampled_indices].reset_index(drop=True)
+    
+    # Convert back to JSON
+    return file_df.to_dict(orient="records")
+
 
 def main():
     # Get all JSON files from qa_output directory
@@ -170,7 +194,20 @@ def main():
             
             with open(file_path, 'r') as file:
                 doc_data = json.load(file)
+            filtered_json = filter_json_by_indices(doc_data)
+            # Evaluate the model
+            model_results = evaluate_model(filtered_json, model_name)
+            results.append(model_results)
+    
+    qa_output_dir = 'qa_output_mm'
+    for filename in os.listdir(qa_output_dir):
+        if filename.endswith('.json'):
+            model_name = filename[:-5]  # Remove .json extension
+            file_path = os.path.join(qa_output_dir, filename)
             
+            with open(file_path, 'r') as file:
+                doc_data = json.load(file)
+            #filtered_json = filter_json_by_indices(doc_data)
             # Evaluate the model
             model_results = evaluate_model(doc_data, model_name)
             results.append(model_results)
